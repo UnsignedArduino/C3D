@@ -703,6 +703,15 @@ namespace C3D {
             out.x = ex; out.y = ey; out.z = ez;
             return out;
         }
+
+        public equals(q: Quat, epsilon: number = 1e-6): boolean {
+            return (
+                Math.abs(this.x - q.x) < epsilon &&
+                Math.abs(this.y - q.y) < epsilon &&
+                Math.abs(this.z - q.z) < epsilon &&
+                Math.abs(this.w - q.w) < epsilon
+            );
+        }
     }
 
     export enum EulerOrder { XYZ, YXZ, ZXY, ZYX, YZX, XZY }
@@ -790,6 +799,50 @@ namespace C3D {
             ae[13] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
             ae[14] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
             ae[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+
+            return this;
+        }
+
+        public multiplyAWithThis(a: Mat4): Mat4 {
+            const ae = a.e;
+            const be = this.e;
+            const e = this.e;
+
+            // Cache elements of A for faster column-based evaluation
+            const a00 = ae[0], a01 = ae[4], a02 = ae[8], a03 = ae[12];
+            const a10 = ae[1], a11 = ae[5], a12 = ae[9], a13 = ae[13];
+            const a20 = ae[2], a21 = ae[6], a22 = ae[10], a23 = ae[14];
+            const a30 = ae[3], a31 = ae[7], a32 = ae[11], a33 = ae[15];
+
+            // Cache original values of 'b'
+            const b00 = be[0], b01 = be[4], b02 = be[8], b03 = be[12];
+            const b10 = be[1], b11 = be[5], b12 = be[9], b13 = be[13];
+            const b20 = be[2], b21 = be[6], b22 = be[10], b23 = be[14];
+            const b30 = be[3], b31 = be[7], b32 = be[11], b33 = be[15];
+
+            // Column 0
+            e[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
+            e[1] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
+            e[2] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
+            e[3] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
+
+            // Column 1
+            e[4] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
+            e[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
+            e[6] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
+            e[7] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
+
+            // Column 2
+            e[8] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
+            e[9] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
+            e[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
+            e[11] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
+
+            // Column 3
+            e[12] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
+            e[13] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
+            e[14] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
+            e[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
 
             return this;
         }
@@ -1051,6 +1104,24 @@ namespace C3D {
             );
         }
 
+        public transpose(): Mat4 {
+            const e = this.e;
+            let tmp: number;
+            // Row 0, Col 1 <-> Row 1, Col 0
+            tmp = e[1]; e[1] = e[4]; e[4] = tmp;
+            // Row 0, Col 2 <-> Row 2, Col 0
+            tmp = e[2]; e[2] = e[8]; e[8] = tmp;
+            // Row 0, Col 3 <-> Row 3, Col 0
+            tmp = e[3]; e[3] = e[12]; e[12] = tmp;
+            // Row 1, Col 2 <-> Row 2, Col 1
+            tmp = e[6]; e[6] = e[9]; e[9] = tmp;
+            // Row 1, Col 3 <-> Row 3, Col 1
+            tmp = e[7]; e[7] = e[13]; e[13] = tmp;
+            // Row 2, Col 3 <-> Row 3, Col 2
+            tmp = e[11]; e[11] = e[14]; e[14] = tmp;
+            return this;
+        }
+
         public setPerspective(fovY: number, aspect: number, near: number, far: number): Mat4 {
             const e = this.e;
             const f = 1 / Math.tan(fovY / 2);
@@ -1134,8 +1205,65 @@ namespace C3D {
 
             return out;
         }
+
+        public extractFrustumPlanes(out: Frustrum): Frustrum {
+            const e = this.e;
+            const r0x = e[0], r0y = e[4], r0z = e[8], r0w = e[12];
+            const r1x = e[1], r1y = e[5], r1z = e[9], r1w = e[13];
+            const r2x = e[2], r2y = e[6], r2z = e[10], r2w = e[14];
+            const r3x = e[3], r3y = e[7], r3z = e[11], r3w = e[15];
+            this._putPlane(out, 0, r3x + r0x, r3y + r0y, r3z + r0z, r3w + r0w);  // left
+            this._putPlane(out, 4, r3x - r0x, r3y - r0y, r3z - r0z, r3w - r0w);  // right
+            this._putPlane(out, 8, r3x + r1x, r3y + r1y, r3z + r1z, r3w + r1w);  // bottom
+            this._putPlane(out, 12, r3x - r1x, r3y - r1y, r3z - r1z, r3w - r1w);  // top
+            this._putPlane(out, 16, r3x + r2x, r3y + r2y, r3z + r2z, r3w + r2w);  // near
+            this._putPlane(out, 20, r3x - r2x, r3y - r2y, r3z - r2z, r3w - r2w);  // far
+            return out;
+        }
+
+        private _putPlane(frustrum: Frustrum, startIndex: number, a: number, b: number, c: number, d: number): void {
+            const inv = 1 / Math.sqrt(a * a + b * b + c * c);
+            const out = frustrum.p;
+            out[startIndex] = a * inv;
+            out[startIndex] = b * inv;
+            out[startIndex] = c * inv;
+            out[startIndex] = d * inv;
+        }
+
+        public maxScaleOnAxis(): number {
+            const e = this.e;
+            const x = e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
+            const y = e[4] * e[4] + e[5] * e[5] + e[6] * e[6];
+            const z = e[8] * e[8] + e[9] * e[9] + e[10] * e[10];
+            const m = x > y ? (x > z ? x : z) : (y > z ? y : z);
+            return Math.sqrt(m);
+        }
+        
+        public equals(m: Mat4, epsilon: number = 1e-6): boolean {
+            const e = this.e;
+            const me = m.e;
+            return (
+                Math.abs(e[0] - me[0]) < epsilon &&
+                Math.abs(e[1] - me[1]) < epsilon &&
+                Math.abs(e[2] - me[2]) < epsilon &&
+                Math.abs(e[3] - me[3]) < epsilon &&
+                Math.abs(e[4] - me[4]) < epsilon &&
+                Math.abs(e[5] - me[5]) < epsilon &&
+                Math.abs(e[6] - me[6]) < epsilon &&
+                Math.abs(e[7] - me[7]) < epsilon &&
+                Math.abs(e[8] - me[8]) < epsilon &&
+                Math.abs(e[9] - me[9]) < epsilon &&
+                Math.abs(e[10] - me[10]) < epsilon &&
+                Math.abs(e[11] - me[11]) < epsilon &&
+                Math.abs(e[12] - me[12]) < epsilon &&
+                Math.abs(e[13] - me[13]) < epsilon &&
+                Math.abs(e[14] - me[14]) < epsilon &&
+                Math.abs(e[15] - me[15]) < epsilon
+            );
+        }
     }
 
+    // tiny mat3 class just to store info for light normals
     export class Mat3 {
         public e: number[];  // 9, column-major
 
@@ -1169,6 +1297,26 @@ namespace C3D {
             const m = new Mat3();
             m.copy(this);
             return m;
+        }
+    }
+
+    // represents camera frustrum to help with culling
+    export class Frustrum {
+        public p: number[];
+
+        public constructor() {
+            this.p[23] = 0;
+            this.p.fill(0);
+        }
+
+        public sphereInFrustum(cx: number, cy: number, cz: number, r: number): boolean {
+            const planes = this.p;
+            for (let p = 0; p < 24; p += 4) {
+                if (planes[p] * cx + planes[p + 1] * cy + planes[p + 2] * cz + planes[p + 3] < -r) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 }
