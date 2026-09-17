@@ -1,8 +1,4 @@
 namespace C3D {
-    export function clamp(x: number, minimum: number, maximum: number): number {
-        return x < minimum ? minimum : (x > maximum ? maximum : x);
-    }
-
     export function clamp1(x: number): number {
         return x < -1 ? -1 : (x > 1 ? 1 : x);
     }
@@ -69,9 +65,9 @@ namespace C3D {
         }
 
         public negate(): Vec3 {
-            this.x *= -1;
-            this.y *= -1;
-            this.z *= -1;
+            this.x = -this.x;
+            this.y = -this.y;
+            this.z = -this.z;
             return this;
         }
 
@@ -111,7 +107,7 @@ namespace C3D {
 
         public normalize(): Vec3 {
             const mSq = this.x * this.x + this.y * this.y + this.z * this.z;
-            if (mSq < 1e-6) {
+            if (mSq < 1e-12) {
                 this.x = this.y = this.z = 0;
                 return this;
             }
@@ -174,6 +170,21 @@ namespace C3D {
             return this;
         }
 
+        // Applies a 3x3 matrix to this vector (used for normals, directions, and lighting)
+        public applyMat3(m: Mat3): Vec3 {
+            const e = m.e;
+            const x = this.x;
+            const y = this.y;
+            const z = this.z;
+
+            // Standard 3x3 matrix-vector multiplication (Column-Major)
+            this.x = e[0] * x + e[3] * y + e[6] * z;
+            this.y = e[1] * x + e[4] * y + e[7] * z;
+            this.z = e[2] * x + e[5] * y + e[8] * z;
+
+            return this;
+        }
+
         // scale and rotation of this direction
         public transformDirection(m: Mat4): Vec3 {
             const e = m.e;
@@ -203,34 +214,34 @@ namespace C3D {
             );
         }
 
-        static readonly UP = new Vec3(0, 1, 0);
-        static readonly FORWARD = new Vec3(0, 0, -1);
-        static readonly RIGHT = new Vec3(1, 0, 0);
+        // static readonly UP = new Vec3(0, 1, 0);
+        // static readonly FORWARD = new Vec3(0, 0, -1);
+        // static readonly RIGHT = new Vec3(1, 0, 0);
 
-        // static _up: Vec3;
-        // static _forward: Vec3;
-        // static _right: Vec3
+        static _up: Vec3;
+        static _forward: Vec3;
+        static _right: Vec3
 
-        // static get UP(): Vec3 {
-        //     if (!Vec3._up) {
-        //         Vec3._up = new Vec3(0, 1, 0);
-        //     }
-        //     return Vec3._up;
-        // }
+        static get UP(): Vec3 {
+            if (!Vec3._up) {
+                Vec3._up = new Vec3(0, 1, 0);
+            }
+            return Vec3._up;
+        }
 
-        // static get FORWARD(): Vec3 {
-        //     if (!Vec3._forward) {
-        //         Vec3._forward = new Vec3(0, 0, -1);
-        //     }
-        //     return Vec3._forward;
-        // }
+        static get FORWARD(): Vec3 {
+            if (!Vec3._forward) {
+                Vec3._forward = new Vec3(0, 0, -1);
+            }
+            return Vec3._forward;
+        }
 
-        // static get RIGHT(): Vec3 {
-        //     if (!Vec3._right) {
-        //         Vec3._right = new Vec3(1, 0, 0);
-        //     }
-        //     return Vec3._right;
-        // }
+        static get RIGHT(): Vec3 {
+            if (!Vec3._right) {
+                Vec3._right = new Vec3(1, 0, 0);
+            }
+            return Vec3._right;
+        }
     }
 
     // standard quat class
@@ -338,7 +349,11 @@ namespace C3D {
             return this;
         }
 
+        private _aTemp: Vec3;
+
         public setFromUnitVectors(from_vec: Vec3, to_vec: Vec3): Quat {
+            if (!this._aTemp) { this._aTemp = new Vec3(); }
+
             const d = from_vec.dot(to_vec);
             // parallel
             if (d > 0.999999) {
@@ -352,20 +367,20 @@ namespace C3D {
             // anti parallel
             else if (d < -0.999999) {
                 const ortho = Math.abs(from_vec.x) < 0.9 ? Vec3.RIGHT : Vec3.UP;
-                const axis = (new Vec3()).crossAWithB(from_vec, ortho);
+                const axis = this._aTemp.crossAWithB(from_vec, ortho);
                 this.x = axis.x;
                 this.y = axis.y;
                 this.z = axis.z;
                 this.w = 0;
-            // normal case
+                // normal case
             } else {
-                const axis = (new Vec3()).crossAWithB(from_vec, to_vec);
+                const axis = this._aTemp.crossAWithB(from_vec, to_vec);
                 this.x = axis.x;
                 this.y = axis.y;
                 this.z = axis.z;
                 this.w = 1 + d;
             }
-            
+
             const m = Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w);
             this.x /= m;
             this.y /= m;
@@ -412,9 +427,21 @@ namespace C3D {
             return this;
         }
 
+        private _zTemp: Vec3;
+        private _xTemp: Vec3;
+        private _yTemp: Vec3;
+        private _mTemp: Mat4;
+
         public setLookRotationFromUnitVectors(forward: Vec3, up: Vec3): Quat {
-            const z = forward.clone().negate(); // must be normalized
-            const x = new Vec3().crossAWithB(forward, up);
+            if (!this._zTemp) { this._zTemp = new Vec3(); }
+            if (!this._xTemp) { this._xTemp = new Vec3(); }
+            if (!this._yTemp) { this._yTemp = new Vec3(); }
+            if (!this._mTemp) { this._mTemp = new Mat4(); }
+
+            // const z = forward.clone().negate(); // must be normalized
+            const z = this._zTemp.copy(forward).negate(); // must be normalized
+            // const x = new Vec3().crossAWithB(forward, up);
+            const x = this._xTemp.crossAWithB(forward, up);
             if (x.lengthSquared() < 1e-8) {
                 // forward is (nearly) parallel or anti-parallel to up — 'up' is
                 // degenerate here, so fall back to whichever world axis is
@@ -424,8 +451,10 @@ namespace C3D {
             }
             x.normalize();
             // recompute true up
-            const y = (new Vec3()).crossAWithB(z, x);
-            const m = new Mat4();
+            // const y = (new Vec3()).crossAWithB(z, x);
+            const y = this._yTemp.crossAWithB(z, x);
+            // const m = new Mat4();
+            const m = this._mTemp;
             const e = m.e;
             e[0] = x.x;
             e[1] = x.y;
@@ -484,15 +513,15 @@ namespace C3D {
         }
 
         public conjugate(): Quat {
-            this.x *= -1;
-            this.y *= -1;
-            this.z *= -1;
+            this.x = -this.x;
+            this.y = -this.y;
+            this.z = -this.z;
             return this;
         }
 
         public invert(): Quat {
             const mSq = this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w;
-            if (mSq < 1e-6) {
+            if (mSq < 1e-12) {
                 this.x = this.y = this.z = 0;
                 this.w = 1;
                 return this;
@@ -501,7 +530,7 @@ namespace C3D {
             this.x *= negOneOverMSq;
             this.y *= negOneOverMSq;
             this.z *= negOneOverMSq;
-            this.w /= mSq;
+            this.w *= -negOneOverMSq;
             return this;
         }
 
@@ -678,4 +707,468 @@ namespace C3D {
 
     export enum EulerOrder { XYZ, YXZ, ZXY, ZYX, YZX, XZY }
 
+    // standard mat4 class
+    export class Mat4 {
+        // column major
+        public e: number[];
+
+        public constructor() {
+            this.e = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+        }
+
+        public identity(): Mat4 {
+            const e = this.e;
+            e.fill(0);
+            e[0] = e[5] = e[10] = e[15] = 1;
+            return this;
+        }
+
+        public copy(m: Mat4): Mat4 {
+            const e = this.e;
+            const me = m.e;
+            e[0] = me[0];
+            e[1] = me[1];
+            e[2] = me[2];
+            e[3] = me[3];
+            e[4] = me[4];
+            e[5] = me[5];
+            e[6] = me[6];
+            e[7] = me[7];
+            e[8] = me[8];
+            e[9] = me[9];
+            e[10] = me[10];
+            e[11] = me[11];
+            e[12] = me[12];
+            e[13] = me[13];
+            e[14] = me[14];
+            e[15] = me[15];
+            return this;
+        }
+
+        public clone(): Mat4 {
+            const m = new Mat4();
+            m.copy(this);
+            return m;
+        }
+
+        public multiplyThisWithB(b: Mat4): Mat4 {
+            const ae = this.e;
+            const be = b.e;
+
+            // Cache original values of 'this' (a)
+            const a00 = ae[0], a01 = ae[4], a02 = ae[8], a03 = ae[12];
+            const a10 = ae[1], a11 = ae[5], a12 = ae[9], a13 = ae[13];
+            const a20 = ae[2], a21 = ae[6], a22 = ae[10], a23 = ae[14];
+            const a30 = ae[3], a31 = ae[7], a32 = ae[11], a33 = ae[15];
+
+            // Cache original values of 'b'
+            const b00 = be[0], b01 = be[4], b02 = be[8], b03 = be[12];
+            const b10 = be[1], b11 = be[5], b12 = be[9], b13 = be[13];
+            const b20 = be[2], b21 = be[6], b22 = be[10], b23 = be[14];
+            const b30 = be[3], b31 = be[7], b32 = be[11], b33 = be[15];
+
+            // Column 0
+            ae[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
+            ae[1] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
+            ae[2] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
+            ae[3] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
+
+            // Column 1
+            ae[4] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
+            ae[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
+            ae[6] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
+            ae[7] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
+
+            // Column 2
+            ae[8] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
+            ae[9] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
+            ae[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
+            ae[11] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
+
+            // Column 3
+            ae[12] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
+            ae[13] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
+            ae[14] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
+            ae[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+
+            return this;
+        }
+
+        public multiplyAWithB(a: Mat4, b: Mat4): Mat4 {
+            const ae = a.e;
+            const be = b.e;
+            const e = this.e;
+
+            // Cache elements of A for faster column-based evaluation
+            const a00 = ae[0], a01 = ae[4], a02 = ae[8], a03 = ae[12];
+            const a10 = ae[1], a11 = ae[5], a12 = ae[9], a13 = ae[13];
+            const a20 = ae[2], a21 = ae[6], a22 = ae[10], a23 = ae[14];
+            const a30 = ae[3], a31 = ae[7], a32 = ae[11], a33 = ae[15];
+
+            // Cache original values of 'b'
+            const b00 = be[0], b01 = be[4], b02 = be[8], b03 = be[12];
+            const b10 = be[1], b11 = be[5], b12 = be[9], b13 = be[13];
+            const b20 = be[2], b21 = be[6], b22 = be[10], b23 = be[14];
+            const b30 = be[3], b31 = be[7], b32 = be[11], b33 = be[15];
+
+            // Column 0
+            e[0] = a00 * b00 + a01 * b10 + a02 * b20 + a03 * b30;
+            e[1] = a10 * b00 + a11 * b10 + a12 * b20 + a13 * b30;
+            e[2] = a20 * b00 + a21 * b10 + a22 * b20 + a23 * b30;
+            e[3] = a30 * b00 + a31 * b10 + a32 * b20 + a33 * b30;
+
+            // Column 1
+            e[4] = a00 * b01 + a01 * b11 + a02 * b21 + a03 * b31;
+            e[5] = a10 * b01 + a11 * b11 + a12 * b21 + a13 * b31;
+            e[6] = a20 * b01 + a21 * b11 + a22 * b21 + a23 * b31;
+            e[7] = a30 * b01 + a31 * b11 + a32 * b21 + a33 * b31;
+
+            // Column 2
+            e[8] = a00 * b02 + a01 * b12 + a02 * b22 + a03 * b32;
+            e[9] = a10 * b02 + a11 * b12 + a12 * b22 + a13 * b32;
+            e[10] = a20 * b02 + a21 * b12 + a22 * b22 + a23 * b32;
+            e[11] = a30 * b02 + a31 * b12 + a32 * b22 + a33 * b32;
+
+            // Column 3
+            e[12] = a00 * b03 + a01 * b13 + a02 * b23 + a03 * b33;
+            e[13] = a10 * b03 + a11 * b13 + a12 * b23 + a13 * b33;
+            e[14] = a20 * b03 + a21 * b13 + a22 * b23 + a23 * b33;
+            e[15] = a30 * b03 + a31 * b13 + a32 * b23 + a33 * b33;
+
+            return this;
+        }
+
+        public compose(pos: Vec3, rot: Quat, scale: Vec3): Mat4 {
+            const e = this.e;
+
+            // rotate
+            // standard rot quat to mat formula
+            e[0] = 1 - 2 * (rot.y * rot.y + rot.z * rot.z);
+            e[1] = 2 * (rot.x * rot.y + rot.w * rot.z);
+            e[2] = 2 * (rot.x * rot.z - rot.w * rot.y);
+
+            e[4] = 2 * (rot.x * rot.y - rot.w * rot.z);
+            e[5] = 1 - 2 * (rot.x * rot.x + rot.z * rot.z);
+            e[6] = 2 * (rot.y * rot.z + rot.w * rot.x);
+
+            e[8] = 2 * (rot.x * rot.z + rot.w * rot.y);
+            e[9] = 2 * (rot.y * rot.z - rot.w * rot.x);
+            e[10] = 1 - 2 * (rot.x * rot.x + rot.y * rot.y);
+
+            // scale
+            e[0] *= scale.x;
+            e[1] *= scale.x;
+            e[2] *= scale.x;
+
+            e[4] *= scale.y;
+            e[5] *= scale.y;
+            e[6] *= scale.y;
+
+            e[8] *= scale.z;
+            e[9] *= scale.z;
+            e[10] *= scale.z;
+
+            // translate
+            e[12] = pos.x;
+            e[13] = pos.y;
+            e[14] = pos.z;
+
+            // fill in bottom row
+            e[3] = e[7] = e[11] = 0;
+            e[15] = 1;
+
+            return this;
+        }
+
+        public decompose(pos: Vec3, rot: Quat, scale: Vec3): void {
+            const e = this.e;
+            const EPS = 1e-6;
+
+            pos.x = e[12]; pos.y = e[13]; pos.z = e[14];
+
+            let sx = Math.sqrt(e[0] * e[0] + e[1] * e[1] + e[2] * e[2]);
+            const sy = Math.sqrt(e[4] * e[4] + e[5] * e[5] + e[6] * e[6]);
+            const sz = Math.sqrt(e[8] * e[8] + e[9] * e[9] + e[10] * e[10]);
+
+            if (this.determinant3() < 0) sx = -sx;
+            scale.x = sx; scale.y = sy; scale.z = sz;
+
+            const e0 = e[0], e1 = e[1], e2 = e[2], e4 = e[4], e5 = e[5], e6 = e[6], e8 = e[8], e9 = e[9], e10 = e[10];
+
+            const validX = Math.abs(sx) > EPS;
+            const validY = sy > EPS;
+            const validZ = sz > EPS;
+            const validCount = (validX ? 1 : 0) + (validY ? 1 : 0) + (validZ ? 1 : 0);
+
+            if (validCount < 2) {
+                // not enough surviving axes to determine a unique rotation — bail
+                // rather than emit NaN or an arbitrary-looking-but-meaningless quat
+                rot.identity();
+                e[0] = e0; e[1] = e1; e[2] = e2; e[4] = e4; e[5] = e5; e[6] = e6; e[8] = e8; e[9] = e9; e[10] = e10;
+                return;
+            }
+
+            if (validCount === 3) {
+                e[0] /= sx; e[1] /= sx; e[2] /= sx;
+                e[4] /= sy; e[5] /= sy; e[6] /= sy;
+                e[8] /= sz; e[9] /= sz; e[10] /= sz;
+            } else {
+                // exactly one axis collapsed — normalize the two good columns,
+                // rebuild the third as their cross product to keep the basis
+                // orthonormal (right-handed: z = x×y, y = z×x, x = y×z)
+                if (validX) { e[0] /= sx; e[1] /= sx; e[2] /= sx; }
+                if (validY) { e[4] /= sy; e[5] /= sy; e[6] /= sy; }
+                if (validZ) { e[8] /= sz; e[9] /= sz; e[10] /= sz; }
+
+                if (!validZ) {
+                    e[8] = e[1] * e[6] - e[2] * e[5];   // z = x × y
+                    e[9] = e[2] * e[4] - e[0] * e[6];
+                    e[10] = e[0] * e[5] - e[1] * e[4];
+                } else if (!validY) {
+                    e[4] = e[9] * e[2] - e[10] * e[1];  // y = z × x
+                    e[5] = e[10] * e[0] - e[8] * e[2];
+                    e[6] = e[8] * e[1] - e[9] * e[0];
+                } else {
+                    e[0] = e[5] * e[10] - e[6] * e[9];   // x = y × z
+                    e[1] = e[6] * e[8] - e[4] * e[10];
+                    e[2] = e[4] * e[9] - e[5] * e[8];
+                }
+            }
+
+            rot.setFromRotationMat(this);
+            e[0] = e0; e[1] = e1; e[2] = e2; e[4] = e4; e[5] = e5; e[6] = e6; e[8] = e8; e[9] = e9; e[10] = e10;
+        }
+
+        public invert(): Mat4 {
+            const e = this.e;
+
+            const n11 = e[0], n12 = e[4], n13 = e[8], n14 = e[12];
+            const n21 = e[1], n22 = e[5], n23 = e[9], n24 = e[13];
+            const n31 = e[2], n32 = e[6], n33 = e[10], n34 = e[14];
+            const n41 = e[3], n42 = e[7], n43 = e[11], n44 = e[15];
+
+            // Calculate 2x2 determinants for sub-matrices
+            const t11 = n33 * n44 - n34 * n43;
+            const t12 = n32 * n44 - n34 * n42;
+            const t13 = n32 * n43 - n33 * n42;
+            const t14 = n31 * n44 - n34 * n41;
+            const t15 = n31 * n43 - n33 * n41;
+            const t16 = n31 * n42 - n32 * n41;
+
+            // Cofactor elements for the first column
+            const c11 = (n22 * t11 - n23 * t12 + n24 * t13);
+            const c12 = -(n21 * t11 - n23 * t14 + n24 * t15);
+            const c13 = (n21 * t12 - n22 * t14 + n24 * t16);
+            const c14 = -(n21 * t13 - n22 * t15 + n23 * t16);
+
+            // Overall 4x4 determinant
+            const det = n11 * c11 + n12 * c12 + n13 * c13 + n14 * c14;
+
+            // Matrix is non-invertible (singular)
+            if (det === 0) {
+                // throw "Matrix is singular and cannot be inverted";
+                return this;
+            }
+
+            const invDet = 1.0 / det;
+
+            // Remaining cofactors
+            const t21 = n23 * n44 - n24 * n43;
+            const t22 = n22 * n44 - n24 * n42;
+            const t23 = n22 * n43 - n23 * n42;
+            const t24 = n21 * n44 - n24 * n41;
+            const t25 = n21 * n43 - n23 * n41;
+            const t26 = n21 * n42 - n22 * n41;
+
+            const t31 = n23 * n34 - n24 * n33;
+            const t32 = n22 * n34 - n24 * n32;
+            const t33 = n22 * n33 - n23 * n32;
+            const t34 = n21 * n34 - n24 * n31;
+            const t35 = n21 * n33 - n23 * n31;
+            const t36 = n21 * n32 - n22 * n31;
+
+            // Column 0
+            e[0] = c11 * invDet;
+            e[1] = c12 * invDet;
+            e[2] = c13 * invDet;
+            e[3] = c14 * invDet;
+
+            // Column 1
+            e[4] = -(n12 * t11 - n13 * t12 + n14 * t13) * invDet;
+            e[5] = (n11 * t11 - n13 * t14 + n14 * t15) * invDet;
+            e[6] = -(n11 * t12 - n12 * t14 + n14 * t16) * invDet;
+            e[7] = (n11 * t13 - n12 * t15 + n13 * t16) * invDet;
+
+            // Column 2
+            e[8] = (n12 * t21 - n13 * t22 + n14 * t23) * invDet;
+            e[9] = -(n11 * t21 - n13 * t24 + n14 * t25) * invDet;
+            e[10] = (n11 * t22 - n12 * t24 + n14 * t26) * invDet;
+            e[11] = -(n11 * t23 - n12 * t25 + n13 * t26) * invDet;
+
+            // Column 3
+            e[12] = -(n12 * t31 - n13 * t32 + n14 * t33) * invDet;
+            e[13] = (n11 * t31 - n13 * t34 + n14 * t35) * invDet;
+            e[14] = -(n11 * t32 - n12 * t34 + n14 * t36) * invDet;
+            e[15] = (n11 * t33 - n12 * t35 + n13 * t36) * invDet;
+
+            return this;
+        }
+
+        // cheaper version of invert() for matrices without scaling
+        public invertOrthonormal(): Mat4 {
+            const e = this.e;
+
+            // 1. Cache rotation matrix elements
+            const m00 = e[0], m01 = e[4], m02 = e[8];
+            const m10 = e[1], m11 = e[5], m12 = e[9];
+            const m20 = e[2], m21 = e[6], m22 = e[10];
+
+            // 2. Cache translation vector elements
+            const tx = e[12], ty = e[13], tz = e[14];
+
+            // 3. Transpose rotation 3x3 in-place (R^T)
+            e[1] = m01; e[2] = m02;
+            e[4] = m10; e[6] = m12;
+            e[8] = m20; e[9] = m21;
+
+            // 4. Compute new translation: -R^T * t
+            e[12] = -(m00 * tx + m10 * ty + m20 * tz);
+            e[13] = -(m01 * tx + m11 * ty + m21 * tz);
+            e[14] = -(m02 * tx + m12 * ty + m22 * tz);
+
+            // Bottom row remains [0, 0, 0, 1]
+            e[3] = 0; e[7] = 0; e[11] = 0; e[15] = 1;
+
+            return this;
+        }
+
+        public determinant3(): number {
+            const e = this.e;
+            return (
+                e[0] * (e[5] * e[10] - e[9] * e[6])
+                - e[4] * (e[1] * e[10] - e[9] * e[2])
+                + e[8] * (e[1] * e[6] - e[5] * e[2])
+            );
+        }
+
+        public setPerspective(fovY: number, aspect: number, near: number, far: number): Mat4 {
+            const e = this.e;
+            const f = 1 / Math.tan(fovY / 2);
+            e[0] = f / aspect;
+            e[1] = e[2] = e[3] = e[4] = 0;
+            e[5] = f;
+            e[6] = e[7] = e[8] = e[9] = 0;
+            e[10] = (far + near) / (near - far);
+            e[11] = -1;
+            e[12] = e[13] = 0;
+            e[14] = (2 * far * near) / (near - far);
+            e[15] = 0;
+            return this;
+        }
+
+        public setOrthographic(l: number, r: number, b: number, t: number, near: number, far: number): Mat4 {
+            const e = this.e;
+            e[0] = 2 / (r - l);
+            e[1] = e[2] = e[3] = e[4] = 0;
+            e[5] = 2 / (t - b);
+            e[6] = e[7] = e[8] = e[9] = 0;
+            e[10] = -2 / (far - near);
+            e[11] = 0;
+            e[12] = -(r + l) / (r - l);
+            e[13] = -(t + b) / (t - b);
+            e[14] = -(far + near) / (far - near);
+            e[15] = 1;
+            return this;
+        }
+
+        public extractNormalMat(out: Mat3): Mat3 {
+            // Extract top-left 3x3 columns
+            const a00 = this.e[0], a01 = this.e[1], a02 = this.e[2];
+            const a10 = this.e[4], a11 = this.e[5], a12 = this.e[6];
+            const a20 = this.e[8], a21 = this.e[9], a22 = this.e[10];
+
+            // Calculate squared column lengths to check for uniform scaling
+            const sx2 = a00 * a00 + a01 * a01 + a02 * a02;
+            const sy2 = a10 * a10 + a11 * a11 + a12 * a12;
+            const sz2 = a20 * a20 + a21 * a21 + a22 * a22;
+
+            const outE = out.e;
+
+            // Check if scales are uniform (sx² ≈ sy² ≈ sz²)
+            if (Math.abs(sx2 - sy2) < 1e-12 * sx2 && Math.abs(sy2 - sz2) < 1e-12 * sy2) {
+                // Fast path: normal matrix for uniform scale s is R / s, not R.
+                // column = s * R_column, so column / s^2 = R_column / s. No sqrt needed.
+                const invScaleSq = sx2 > 0 ? 1.0 / sx2 : 1.0;
+                outE[0] = a00 * invScaleSq; outE[1] = a01 * invScaleSq; outE[2] = a02 * invScaleSq;
+                outE[3] = a10 * invScaleSq; outE[4] = a11 * invScaleSq; outE[5] = a12 * invScaleSq;
+                outE[6] = a20 * invScaleSq; outE[7] = a21 * invScaleSq; outE[8] = a22 * invScaleSq;
+                return out;
+            }
+
+            // Slow Path: Non-uniform scale present — compute Inverse Transpose
+            // Calculate minors (cofactors)
+            const b00 = a11 * a22 - a12 * a21;
+            const b01 = a12 * a20 - a10 * a22;
+            const b02 = a10 * a21 - a11 * a20;
+
+            const b10 = a02 * a21 - a01 * a22;
+            const b11 = a00 * a22 - a02 * a20;
+            const b12 = a01 * a20 - a00 * a21;
+
+            const b20 = a01 * a12 - a02 * a11;
+            const b21 = a02 * a10 - a00 * a12;
+            const b22 = a00 * a11 - a01 * a10;
+
+            let det = a00 * b00 + a01 * b01 + a02 * b02;
+
+            if (det === 0) {
+                return out; // Handle degenerate scale (scale factor of zero)
+            }
+
+            det = 1.0 / det;
+
+            // Transposed-inverse matrix output
+            outE[0] = b00 * det; outE[1] = b01 * det; outE[2] = b02 * det;
+            outE[3] = b10 * det; outE[4] = b11 * det; outE[5] = b12 * det;
+            outE[6] = b20 * det; outE[7] = b21 * det; outE[8] = b22 * det;
+
+            return out;
+        }
+    }
+
+    export class Mat3 {
+        public e: number[];  // 9, column-major
+
+        constructor() {
+            this.e = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+        }
+
+        public identity(): Mat3 {
+            const e = this.e;
+            e.fill(0);
+            e[0] = e[4] = e[8] = 1;
+            return this;
+        }
+
+        public copy(m: Mat3): Mat3 {
+            const e = this.e;
+            const me = m.e;
+            e[0] = me[0];
+            e[1] = me[1];
+            e[2] = me[2];
+            e[3] = me[3];
+            e[4] = me[4];
+            e[5] = me[5];
+            e[6] = me[6];
+            e[7] = me[7];
+            e[8] = me[8];
+            return this;
+        }
+
+        public clone(): Mat3 {
+            const m = new Mat3();
+            m.copy(this);
+            return m;
+        }
+    }
 }
