@@ -1206,7 +1206,7 @@ namespace C3D {
             return out;
         }
 
-        public extractFrustumPlanes(out: Frustrum): Frustrum {
+        public extractFrustumPlanes(out: Frustum): Frustum {
             const e = this.e;
             const r0x = e[0], r0y = e[4], r0z = e[8], r0w = e[12];
             const r1x = e[1], r1y = e[5], r1z = e[9], r1w = e[13];
@@ -1221,13 +1221,13 @@ namespace C3D {
             return out;
         }
 
-        private _putPlane(frustrum: Frustrum, startIndex: number, a: number, b: number, c: number, d: number): void {
+        private _putPlane(frustum: Frustum, startIndex: number, a: number, b: number, c: number, d: number): void {
             const inv = 1 / Math.sqrt(a * a + b * b + c * c);
-            const out = frustrum.p;
+            const out = frustum.p;
             out[startIndex] = a * inv;
-            out[startIndex] = b * inv;
-            out[startIndex] = c * inv;
-            out[startIndex] = d * inv;
+            out[startIndex + 1] = b * inv;
+            out[startIndex + 2] = c * inv;
+            out[startIndex + 3] = d * inv;
         }
 
         public maxScaleOnAxis(): number {
@@ -1300,11 +1300,12 @@ namespace C3D {
         }
     }
 
-    // represents camera frustrum to help with culling
-    export class Frustrum {
+    // represents camera frustum to help with culling
+    export class Frustum {
         public p: number[];
 
         public constructor() {
+            this.p = [];
             this.p[23] = 0;
             this.p.fill(0);
         }
