@@ -21,3 +21,8 @@ namespace C3D {
         }
     }
 }
+
+game.consoleOverlay.setVisible(true);
+game.stats = true;
+
+console.log("Hello, world!");
