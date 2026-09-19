@@ -7,6 +7,7 @@
     "files": [
         "C3D_math.ts",
         "C3D_object3d.ts",
+        "C3D_camera.ts",
         "main.ts",
         "README.md",
         "assets.json"

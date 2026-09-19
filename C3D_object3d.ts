@@ -6,11 +6,12 @@ namespace C3D {
     public readonly scale: Vec3;
 
     public visible: boolean = true;
+    public name: string;
 
     public parent: Object3D;
     public readonly children: Object3D[];
 
-    public constructor(public name = "object3d") {
+    public constructor() {
       this.position = new Vec3();
       this.rotation = new Quat();
       this.scale = new Vec3(1, 1, 1);
@@ -19,6 +20,7 @@ namespace C3D {
       this.worldMatrix = new Mat4();
       this.parent = null;
       this._trsSnapshot = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+      this.name = "Object3D";
     }
 
     // does not change child's local matrix, update their world matrix
