@@ -1386,7 +1386,7 @@ namespace C3D {
             if (newParent === this.parent) {
                 // throw "Cannot set parent to itself";
                 return;
-            };
+            }
 
             // reject cycles: newParent must not be this or a descendant of this
             let p = newParent;
@@ -1412,11 +1412,13 @@ namespace C3D {
             if (newParent) newParent.children.push(this);
 
             if (keepWorld) {
-                if (newParent) {
+                if (newParent && newParent.worldMatrix.determinant3() !== 0) {
                     if (!this._mTmp) this._mTmp = new Mat4();
                     this._mTmp.copy(newParent.worldMatrix).invert();
                     this.localMatrix.multiplyAWithB(this._mTmp, this.worldMatrix);
                 } else {
+                    // no parent, or parent has a collapsed scale axis: invert() would be
+                    // silently wrong, so keep the local matrix as a copy of world instead
                     this.localMatrix.copy(this.worldMatrix);
                 }
                 this.localMatrix.decompose(this.position, this.rotation, this.scale);
@@ -1444,7 +1446,9 @@ namespace C3D {
             }
 
             this._worldDirty = false;
-            for (let i = 0; i < this.children.length; i++) this.children[i].updateWorldMatrix(dirty);
+            const children = this.children;
+            const n = children.length;
+            for (let i = 0; i < n; i++) children[i].updateWorldMatrix(dirty);
         }
 
         // walks UP the parent chain, refreshing world matrices so this.worldMatrix is
@@ -1495,3 +1499,6 @@ namespace C3D {
         }
     }
 }
+
+game.consoleOverlay.setVisible(true);
+game.stats = true;
