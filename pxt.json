@@ -5,7 +5,8 @@
         "device": "*"
     },
     "files": [
-        "main.blocks",
+        "C3D_math.ts",
+        "C3D_object3d.ts",
         "main.ts",
         "README.md",
         "assets.json"
