@@ -62,6 +62,13 @@ The public API is objects. Inside the renderer everything is flat arrays. A user
   (e.g. `worldMatrix.e` into twelve locals before the vertex loop).
 - Use a class hierarchy at scene granularity (one class per light type) and an enum field plus a
   `switch` at triangle granularity.
+- **One function per pipeline stage, never one for the whole pipeline.** A function whose locals
+  (plus compiler temps) reach ~128 gets a dictionary-mode frame object in V8, and every local
+  access in it slows ~20x. The first single-function `render()` had 202 and rasterized 6x slower
+  than the old renderer. Stay under ~100 per hot function; count them in `built/binary.js`
+  (simulator-performance.md §1). A call per model or per triangle (~45 ns) is cheap by comparison.
+- `Math.min`/`Math.max` are user functions here, not shims (~45 ns each). Use ternaries in
+  per-column and per-pixel code.
 
 ### Static TypeScript gotchas
 
