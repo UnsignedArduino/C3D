@@ -223,6 +223,9 @@ namespace C3D {
 
   export abstract class Material {
     cull: CullMode = CullMode.Back;
+
+    // pxt needs an explicit constructor for field initializers and super()
+    protected constructor() {}
   }
 
   export enum CullMode {
