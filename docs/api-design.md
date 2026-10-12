@@ -19,12 +19,14 @@ up:
 | Math: `Vec3`, `Quat`, `Mat4`, `Mat3`, `EulerOrder`, `clamp1` | `C3D_math.ts` | Done |
 | Scene graph: `Object3D` | `C3D_object3d.ts` | Core done, convenience methods not yet |
 | Cameras: `Camera`, `PerspectiveCamera`, `OrthographicCamera`, `Frustum` | `C3D_camera.ts` | Done |
-| Geometry and materials: `Mesh`, `Material`, `CullMode`, `SingleColorMaterial`, `FaceColorMaterial`, `TextureMaterial`, `Model` | `C3D_geometry_and_materials.ts` | Core done, mesh builders and `fromOBJ` not yet |
-| Lights, scene, renderer, raycasting | — | Not started |
+| Geometry and materials: `Mesh`, `Material`, `CullMode`, `SingleColorMaterial`, `FaceColorMaterial`, `TextureMaterial`, `Model` | `C3D_model.ts` | Core done, mesh builders and `fromOBJ` not yet |
+| Scene, renderer: `Scene`, `Renderer`, `RendererStats` | `C3D_renderer.ts` | Core done, unlit: transform, near/far/side clipping, per-model frustum culling, back/front-face culling, float z-buffer, single and per-face colour, stats. Not yet: `TextureMaterial` path, `wireframe`, `collectStats` gating, `backgroundImage`, removing the per-frame allocations in scene traversal and the clipper |
+| Lights, raycasting | — | Not started |
 | Arcade integration, blocks | — | Not started |
 
-The old renderer in [old_main.ts](old_main.ts) is reference material only. The new renderer gets
-written against the classes below.
+The old renderer in [old_main.ts](old_main.ts) is reference material only. The new renderer in
+`C3D_renderer.ts` is written against the classes below, and already beats it ~2.4x on the old
+1000-cube benchmark (§12).
 
 ---
 
@@ -316,7 +318,7 @@ Decisions:
 
 ---
 
-## 5. Renderer (planned)
+## 5. Renderer (core done)
 
 ### Pipeline requirements
 

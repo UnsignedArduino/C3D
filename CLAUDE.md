@@ -62,10 +62,15 @@ order for everything not yet written. The two companion docs it references:
 3. **Cameras (shipped)** — `Camera`, `PerspectiveCamera`, `OrthographicCamera` in `C3D_camera.ts`.
 4. **Geometry and materials (core shipped)** — `Mesh` (flat `positions`/`indices`/`uvs` arrays,
    face/vertex normals, bounding radius), `Material` with `SingleColorMaterial`, `FaceColorMaterial`
-   and `TextureMaterial`, `CullMode`, and `Model` in `C3D_geometry_and_materials.ts`. Mesh builders
+   and `TextureMaterial`, `CullMode`, and `Model` in `C3D_model.ts`. Mesh builders
    (`Mesh.box` etc.) and `Model.fromOBJ` aren't written yet; see api-design.md §6.
-5. **Lights, scene/renderer, Arcade integration** — sketched, not yet implemented; see
-   api-design.md §5, §7 and §8 for the intended shapes before adding any of these.
+5. **Scene and renderer (core shipped, unlit)** — `Scene`, `Renderer` and `RendererStats` in
+   `C3D_renderer.ts`: transform, clipping, frustum and face culling, float z-buffer, single and
+   per-face colour. Texturing and the rest are listed in api-design.md's status table and §5. The
+   pipeline is split into one function per stage on purpose: a single function with ~128+ locals
+   gets a dictionary-mode frame and runs ~20x slower (simulator-performance.md §1).
+6. **Lights, Arcade integration** — sketched, not yet implemented; see api-design.md §7 and §8 for
+   the intended shapes before adding any of these.
 
 ### Conventions that matter when extending this code
 
