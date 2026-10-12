@@ -125,7 +125,6 @@ namespace C3D {
       scene.updateWorldMatrix();
       camera.updateMatrices(width, height);
       // clear
-      this._target.fill(scene.background);
       this._frameBuf.fill(scene.background);
       this._zBuf.fill(2);  // infinitely far away
       //// collect models
@@ -134,6 +133,8 @@ namespace C3D {
         //// setup
         const positions = model.mesh.positions;
         const indices = model.mesh.indices;
+        const zBuf = this._zBuf;
+        const frameBuf = this._frameBuf;
         // gather and validate material type
         this._fetchMaterials(model); // result stored on class fields
         // frustum cull
@@ -149,7 +150,7 @@ namespace C3D {
         const m03 = e[12], m13 = e[13], m23 = e[14], m33 = e[15];
         // determine cull and mirror
         const cullType = Renderer._getMaterialCull(model);
-        // reset per-model output buffers
+        // per-model output buffers
         const vertexBuf: number[] = []; // x, y, z, w
         const indexBuf: number[] = []; // holds triangles, three indices into vertexBuf
         const clipCodeBuf: number[] = [];
@@ -339,40 +340,39 @@ namespace C3D {
         triangleCount = (indexBufCount / 3) | 0;
         //// rasterize
         for (let i = 0; i < triangleCount; i++) {
-          const i0 = indexBuf[i * 3];
-          const i1 = indexBuf[i * 3 + 1];
-          const i2 = indexBuf[i * 3 + 2];
-          const v0x = vertexBuf[i0 * vertexStride];
-          const v0y = vertexBuf[i0 * vertexStride + 1];
-          // const v0z = vertexBuf[i0 * vertexStride + 2];
-          const v1x = vertexBuf[i1 * vertexStride];
-          const v1y = vertexBuf[i1 * vertexStride + 1];
-          // const v1z = vertexBuf[i1 * vertexStride + 2];
-          const v2x = vertexBuf[i2 * vertexStride];
-          const v2y = vertexBuf[i2 * vertexStride + 1];
-          // const v2z = vertexBuf[i2 * vertexStride + 2];
+          let i0 = indexBuf[i * 3];
+          let i1 = indexBuf[i * 3 + 1];
+          let i2 = indexBuf[i * 3 + 2];
+          let v0x = vertexBuf[i0 * vertexStride];
+          let v0y = vertexBuf[i0 * vertexStride + 1];
+          let v0z = vertexBuf[i0 * vertexStride + 2];
+          let v1x = vertexBuf[i1 * vertexStride];
+          let v1y = vertexBuf[i1 * vertexStride + 1];
+          let v1z = vertexBuf[i1 * vertexStride + 2];
+          let v2x = vertexBuf[i2 * vertexStride];
+          let v2y = vertexBuf[i2 * vertexStride + 1];
+          let v2z = vertexBuf[i2 * vertexStride + 2];
           // cross product of edges
           // a is the vector from v0 to v1
-          const ax = v1x - v0x;
-          const ay = v1y - v0y;
-          // const az = v1z - v0z;
+          let ax = v1x - v0x;
+          let ay = v1y - v0y;
+          let az = v1z - v0z;
           // b is the vector from v0 to v2
-          const bx = v2x - v0x;
-          const by = v2y - v0y;
-          // const bz = v2z - v0z;
+          let bx = v2x - v0x;
+          let by = v2y - v0y;
+          let bz = v2z - v0z;
           // get the z component of the cross product (twice the area of the
           // triangle)
           // negative when triangle facing camera AND triangle is wound
           // counter-clockwise in screen space
           // equal to 0 when triangle is degenerate
-          const area2 = ax * by - bx * ay;
+          let area2 = ax * by - bx * ay;
           // cullType is 1 for backface cull (keep front)
           // cullType is -1 for frontface cull (keep back)
           if (area2 == 0 || (cullType != 0 && area2 * cullType > 0)) {
             // cull this triangle
             continue;
           }
-          // rasterize the triangle
           // // test wireframe
           // this._target.drawLine(v0x, v0y, v1x, v1y, 1);
           // this._target.drawLine(v1x, v1y, v2x, v2y, 1);
@@ -384,8 +384,87 @@ namespace C3D {
           //   this._matType == 1 ? this._matFaceColors[faceBuf[i]] :
           //   1 // default color for unimplemented TextureMaterial
           // );
+          // sort indices by x, so i0 is left, i1 is middle, i2 is right
+          if (vertexBuf[i0 * vertexStride] > vertexBuf[i1 * vertexStride]) {
+            const tmp = i0;
+            i0 = i1;
+            i1 = tmp;
+          }
+          if (vertexBuf[i1 * vertexStride] > vertexBuf[i2 * vertexStride]) {
+            const tmp = i1;
+            i1 = i2;
+            i2 = tmp;
+          }
+          if (vertexBuf[i0 * vertexStride] > vertexBuf[i1 * vertexStride]) {
+            const tmp = i0;
+            i0 = i1;
+            i1 = tmp;
+          }
+          v0x = vertexBuf[i0 * vertexStride];
+          v0y = vertexBuf[i0 * vertexStride + 1];
+          v0z = vertexBuf[i0 * vertexStride + 2];
+          v1x = vertexBuf[i1 * vertexStride];
+          v1y = vertexBuf[i1 * vertexStride + 1];
+          v1z = vertexBuf[i1 * vertexStride + 2];
+          v2x = vertexBuf[i2 * vertexStride];
+          v2y = vertexBuf[i2 * vertexStride + 1];
+          v2z = vertexBuf[i2 * vertexStride + 2];
+          // a is the vector from v0 to v1
+          ax = v1x - v0x;
+          ay = v1y - v0y;
+          az = v1z - v0z;
+          // b is the vector from v0 to v2
+          bx = v2x - v0x;
+          by = v2y - v0y;
+          bz = v2z - v0z;
+          area2 = ax * by - bx * ay;
+          const dzdx = (az * by - ay * bz) / area2;
+          const dzdy = (ax * bz - az * bx) / area2;
+          const start = Math.max(Math.ceil(v0x), 0);
+          const middle = Math.min(Math.max(Math.ceil(v1x), 0), width);
+          const end = Math.min(Math.ceil(v2x), width);
+          const longEdgeDydx = (v2y - v0y) / (v2x - v0x);
+          const shortEdgeFirstDydx = (v1y - v0y) / (v1x - v0x);
+          const shortEdgeSecondDydx = (v2y - v1y) / (v2x - v1x);
+          let shortEdgeDydx = shortEdgeFirstDydx;
+          let shortEdgeAnchorX = v0x;
+          let shortEdgeAnchorY = v0y;
+          let singleOrFaceColor = 0;  // empty for texture
+          if (this._matType == 0) {
+            singleOrFaceColor = this._matSingleColor;
+          } else if (this._matType == 1) {
+            singleOrFaceColor = this._matFaceColors[faceBuf[i]];
+          } else {
+            throw "TextureMaterial not implemented yet";
+          }
+          for (let x = start; x < end; x++) {
+            const longEdgeY = v0y + (x - v0x) * longEdgeDydx;
+            if (x == middle) {
+              // >= works but == means happens once
+              shortEdgeDydx = shortEdgeSecondDydx;
+              shortEdgeAnchorX = v1x;
+              shortEdgeAnchorY = v1y;
+            }
+            const shortEdgeY = shortEdgeAnchorY + (x - shortEdgeAnchorX) * shortEdgeDydx;
+            const topY = Math.min(longEdgeY, shortEdgeY);
+            const bottomY = Math.max(longEdgeY, shortEdgeY);
+            const yStart = Math.max(Math.ceil(topY), 0);
+            const yEnd = Math.min(Math.ceil(bottomY), height);
+            let z = v0z + dzdx * (x - v0x) + dzdy * (yStart - v0y);
+            let j = x * height + yStart;
+            for (let y = yStart; y < yEnd; y++) {
+              if (z < zBuf[j]) {
+                zBuf[j] = z;
+                frameBuf[j] = singleOrFaceColor;
+              }
+              j ++;
+              z += dzdy;
+            }
+          }
         }
       }
+      // copy framebuffer to target image
+      this._target.setRows(0, this._frameBuf);
     }
   }
 

@@ -237,27 +237,30 @@ namespace C3D {
   export class SingleColorMaterial extends Material {
     public color: number;
 
-    public constructor (color: number) {
+    public constructor (color: number, cull: CullMode = CullMode.Back) {
       super();
       this.color = color;
+      this.cull = cull;
     }
   }
 
   export class FaceColorMaterial extends Material {
     public colors: number[];
 
-    public constructor(colors: number[]) {
+    public constructor(colors: number[], cull: CullMode = CullMode.Back) {
       super();
       this.colors = colors;
+      this.cull = cull;
     }
   }
 
   export class TextureMaterial extends Material {
     public texture: Image;
 
-    public constructor(texture: Image) {
+    public constructor(texture: Image, cull: CullMode = CullMode.Back) {
       super();
       this.texture = texture;
+      this.cull = cull;
     }
   }
 
