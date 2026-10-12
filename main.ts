@@ -1,6 +1,6 @@
 // any code below is temporarily here, will be moved into separate files later
 
-game.consoleOverlay.setVisible(true);
+// game.consoleOverlay.setVisible(true);
 game.stats = true;
 
 // single rotating cube, ported from docs/old_main.ts
@@ -33,17 +33,30 @@ scene.setBackgroundImage(picture);
 
 const cubeMesh = new C3D.Mesh(CUBE_POSITIONS, CUBE_INDICES);
 const cubeMaterial = new C3D.FaceColorMaterial(CUBE_COLORS);
-const cube1 = new C3D.Model(cubeMesh, cubeMaterial);
-const cube2 = new C3D.Model(cubeMesh, cubeMaterial);
-cube2.position.set(1, 0, 0);
-cube2.scale.set(-1, 1, 1);
-
 const world = new C3D.Scene();
-world.addChild(cube1);
-world.addChild(cube2);
+
+// const cube1 = new C3D.Model(cubeMesh, cubeMaterial);
+// world.addChild(cube1);
+
+const CUBE_AMOUNT = 1000;
+for (let i = 0; i < CUBE_AMOUNT; i++) {
+  const cubeModel = new C3D.Model(cubeMesh, cubeMaterial);
+  cubeModel.position.set(
+    randint(-500, 500) / 100,
+    randint(-500, 500) / 100,
+    randint(-500, 500) / 100,
+  );
+  cubeModel.rotation.setFromEuler(
+      randint(1, 628) / 100,
+      randint(1, 628) / 100,
+      randint(1, 628) / 100
+  );
+  world.addChild(cubeModel);
+}
 
 const camera = new C3D.PerspectiveCamera(70, 0.1, 100);
-camera.position.set(0, 0, 4);
+// const camera = new C3D.OrthographicCamera(10, 0.1, 100);
+camera.position.set(0, 0, 10);
 world.addChild(camera);
 
 const renderer = new C3D.Renderer(picture);
@@ -85,10 +98,80 @@ function updateCamera(dt: number) {
   if (controller.player1.B.isPressed()) camera.position.y -= step;
 }
 
+let lastDebugStrLog = 1000;
+
 game.onUpdate(() => {
   updateCamera(game.currentScene().eventContext.deltaTime);
+
   // old Transform built R = Ry * Rx * Rz, which is EulerOrder.YXZ (the default)
-  const r = game.runtime() / 8000 * Math.PI;
-  cube1.rotation.setFromEuler(r, r, r);
+  // const r = game.runtime() / 8000 * Math.PI;
+  // cube1.rotation.setFromEuler(r, r, r);
+  for (let i = 0; i < world.children.length; i ++) {
+    const m = world.children[i];
+    if (m == camera) {
+      continue;
+    }
+    let r = game.runtime() / 1000 * Math.PI;
+    if (i % 3 == 0) {
+      r /= 4;
+    } else if (i % 3 == 1) {
+      r /= 2;
+    } else /* if (i % 3 == 2) */ {
+      r /= 1;
+    }
+    m.rotation.setFromEuler(r, r / 2, r / 4);
+  }
+
   renderer.render(world, camera);
+
+  const s = renderer.stats;
+  checkTriangleStats(s);
+  convertStatTimingsToMs(s);
+  const debugStr =
+    `tFrame: ${s.timeElapsed}\n` +
+    `tModelCollect: ${s.timeModelCollect}\n` +
+    `tSetupAndMats: ${s.timeModelSetupAndMats}\n` +
+    `tMVPs: ${s.timeModelMVPs}\n` +
+    `tVertexTrans: ${s.timeModelVertexTrans}\n` +
+    `tTriClip: ${s.timeModelTriangleClip}\n` +
+    `tProj: ${s.timeModelProjection}\n` +
+    `tRaster: ${s.timeModelRasterize}\n` +
+    `pxTest: ${s.pixelsTested}\n` +
+    `pxWrite: ${s.pixelsWritten}\n` +
+    `tris: ${s.trianglesRasterized} / ${s.trianglesInput}`;
+
+  picture.print(debugStr, 0, 0, 15);
+  if (game.runtime() - lastDebugStrLog > 1000) {
+    console.log(debugStr);
+    lastDebugStrLog = game.runtime();
+  }
 });
+
+// every triangle must land in exactly one bucket at each stage, see the comment
+// on RendererStats; a mismatch means classification or the clipper fan is off
+function checkTriangleStats(st: C3D.RendererStats) {
+  const sorted = st.trianglesTrivialReject + st.trianglesTrivialAccept + st.trianglesClipped;
+  if (st.trianglesInput != sorted) {
+    console.log(`stats: input ${st.trianglesInput} != reject+accept+clipped ${sorted}`);
+  }
+  const toRaster = st.trianglesTrivialAccept + st.trianglesClipOutput;
+  const drawnOrCulled = st.trianglesCulled + st.trianglesRasterized;
+  if (toRaster != drawnOrCulled) {
+    console.log(`stats: accept+clipOutput ${toRaster} != culled+rasterized ${drawnOrCulled}`);
+  }
+}
+
+function convertStatTimingsToMs(st: C3D.RendererStats) {
+  const convert = (t: number): number => {
+    return Math.roundWithPrecision(t / 1000, 3);
+  }
+
+  st.timeElapsed = convert(st.timeElapsed);
+  st.timeModelCollect = convert(st.timeModelCollect);
+  st.timeModelSetupAndMats = convert(st.timeModelSetupAndMats);
+  st.timeModelMVPs = convert(st.timeModelMVPs);
+  st.timeModelVertexTrans = convert(st.timeModelVertexTrans);
+  st.timeModelTriangleClip = convert(st.timeModelTriangleClip);
+  st.timeModelProjection = convert(st.timeModelProjection);
+  st.timeModelRasterize = convert(st.timeModelRasterize);
+}

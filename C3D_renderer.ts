@@ -9,6 +9,40 @@ namespace C3D {
     }
   }
 
+  export class RendererStats {
+    // all times are in micros
+    public timeElapsed = 0;
+    public timeModelCollect = 0;
+    public timeModelSetupAndMats = 0;
+    public timeModelMVPs = 0;
+    public timeModelVertexTrans = 0;
+    public timeModelTriangleClip = 0;
+    public timeModelProjection = 0;
+    public timeModelRasterize = 0;
+
+    public modelsVisible = 0;
+    public modelsRendered = 0;
+    public modelsCulled = 0;
+
+    // per frame, these two always hold:
+    //   trianglesInput = trianglesTrivialReject + trianglesTrivialAccept + trianglesClipped
+    //   trianglesTrivialAccept + trianglesClipOutput = trianglesCulled + trianglesRasterized
+    // trianglesInput only counts models that passed frustum culling
+    public trianglesInput = 0;
+    public trianglesTrivialReject = 0;
+    public trianglesTrivialAccept = 0;
+    public trianglesClipped = 0;  // sent to the clipper
+    public trianglesClippedAway = 0;  // sent to the clipper, nothing left
+    public trianglesClipOutput = 0;  // fan triangles the clipper emitted
+
+    public trianglesCulled = 0;
+    public trianglesRasterized = 0;
+    public pixelsTested = 0;
+    public pixelsWritten = 0;
+
+    public constructor() {}
+  }
+
   export class Renderer {
     private _target: Image;
 
@@ -23,6 +57,8 @@ namespace C3D {
     private _matFaceColors: number[]
     private _matTexture: Image;
 
+    public readonly stats: RendererStats;
+
     public constructor(target: Image) {
       this._target = target;
       const w = this._target.width;
@@ -34,6 +70,7 @@ namespace C3D {
       this._frameBuf = Buffer.create(w * h);
       // set up some more scratch vars
       this._mvpMat4 = new Mat4();
+      this.stats = new RendererStats();
     }
 
     // for now, breaking code up into functions, even if they are "expensive"
@@ -118,6 +155,31 @@ namespace C3D {
     public render(scene: Scene, camera: Camera) {
       // you'll see some allocations in this function, but they are dwarfed by
       // actual triangle and pixel work, optimize them later
+      let timeModelCollect = 0;
+      let timeModelSetupAndMats = 0;
+      let timeModelMVPs = 0;
+      let timeModelVertexTrans = 0;
+      let timeModelTriangleClip = 0;
+      let timeModelProjection = 0;
+      let timeModelRasterize = 0;
+
+      let modelsVisible = 0;
+      let modelsRendered = 0;
+      let modelsCulled = 0;
+
+      let trianglesInput = 0;
+      let trianglesTrivialReject = 0;
+      let trianglesTrivialAccept = 0;
+      let trianglesClipped = 0;
+      let trianglesClippedAway = 0;
+      let trianglesClipOutput = 0;
+
+      let trianglesCulled = 0;
+      let trianglesRasterized = 0;
+      let pixelsTested = 0;
+      let pixelsWritten = 0;
+
+      const timeRenderStart = control.micros();
       //// frame setup
       // update matrices
       const width = this._target.width;
@@ -128,9 +190,15 @@ namespace C3D {
       this._frameBuf.fill(scene.background);
       this._zBuf.fill(2);  // infinitely far away
       //// collect models
+      const timeModelCollectStart = control.micros();
       const models = Renderer._getModelsFromScene(scene);
+      const timeModelCollectEnd = control.micros();
+      timeModelCollect = timeModelCollectEnd - timeModelCollectStart;
+      modelsVisible = models.length;
       for (const model of models) {
         //// setup
+        const timeModelSetupAndMatsStart = control.micros();
+
         const positions = model.mesh.positions;
         const indices = model.mesh.indices;
         const zBuf = this._zBuf;
@@ -139,9 +207,18 @@ namespace C3D {
         this._fetchMaterials(model); // result stored on class fields
         // frustum cull
         if (Renderer._modelDefinitelyOutsideFrustum(model, camera)) {
+          const timeModelSetupAndMatsEnd = control.micros();
+          timeModelSetupAndMats += timeModelSetupAndMatsEnd - timeModelSetupAndMatsStart;
+          modelsCulled++;
           continue;
         }
+
+        const timeModelSetupAndMatsEnd = control.micros();
+        timeModelSetupAndMats += timeModelSetupAndMatsEnd - timeModelSetupAndMatsStart;
+        modelsRendered++;
         // build mvp
+        const timeModelMVPsStart = control.micros();
+
         this._mvpMat4.multiplyAWithB(camera.viewProjectionMatrix, model.worldMatrix);
         const e = this._mvpMat4.e;
         const m00 = e[0], m10 = e[1], m20 = e[2], m30 = e[3];
@@ -159,7 +236,12 @@ namespace C3D {
         let indexBufCount = 0;
         let faceBufCount = 0;
         let clipCodeBufCount = 0;
+
+        const timeModelMVPsEnd = control.micros();
+        timeModelMVPs += timeModelMVPsEnd - timeModelMVPsStart;
         //// vertex transform
+        const timeModelVertexTransStart = control.micros();
+
         const vertexStride = 4;  // x, y, z, w
         let vertexCount = (positions.length / 3) | 0;
         for (let i = 0; i < vertexCount; i ++) {
@@ -201,8 +283,14 @@ namespace C3D {
         }
         vertexBufCount = vertexCount * vertexStride;
         clipCodeBufCount = vertexCount;
+
+        const timeModelVertexTransEnd = control.micros();
+        timeModelVertexTrans += timeModelVertexTransEnd - timeModelVertexTransStart;
         //// triangle clipping
+        const timeModelTriangleClipStart = control.micros();
+
         let triangleCount = (indices.length / 3) | 0;
+        trianglesInput += triangleCount;
         for (let i = 0; i < triangleCount; i ++) {
           const v0 = indices[i * 3];
           const v1 = indices[i * 3 + 1];
@@ -213,6 +301,7 @@ namespace C3D {
           // trivial reject
           if ((c0 & c1 & c2) != 0) {
             // in the original code we don't emit the triangle
+            trianglesTrivialReject ++;
           }
           // trivial accept
           else if ((c0 | c1 | c2) == 0) {
@@ -221,9 +310,11 @@ namespace C3D {
             indexBuf[indexBufCount++] = v1;
             indexBuf[indexBufCount++] = v2;
             faceBuf[faceBufCount++] = i;
+            trianglesTrivialAccept ++;
           }
           // partial clip
           else {
+            trianglesClipped ++;
             let polyA: number[] = [];
             for (const v of [v0, v1, v2]) {
               for (let j = 0; j < vertexStride; j ++) {
@@ -298,6 +389,7 @@ namespace C3D {
               }
             }
             if (isDead) {
+              trianglesClippedAway ++;
               continue;
             }
             // append polyA verts to vertexBuf starting at vertexBufCount, base index
@@ -312,10 +404,15 @@ namespace C3D {
               indexBuf[indexBufCount++] = base + j + 1;
               faceBuf[faceBufCount++] = i;
             }
+            trianglesClipOutput += polyACount - 2;
           }
         }
+
+        const timeModelTriangleClipEnd = control.micros();
+        timeModelTriangleClip += timeModelTriangleClipEnd - timeModelTriangleClipStart;
         //// projection
-        // project vertices
+        const timeModelProjectionStart = control.micros();
+
         vertexCount = (vertexBufCount / vertexStride) | 0;
         const halfWidth = 0.5 * width;
         const halfWidthSub = halfWidth - 0.5;
@@ -338,7 +435,12 @@ namespace C3D {
           vertexBuf[ii + 3] = invW;
         }
         triangleCount = (indexBufCount / 3) | 0;
+
+        const timeModelProjectionEnd = control.micros();
+        timeModelProjection += timeModelProjectionEnd - timeModelProjectionStart;
         //// rasterize
+        const timeModelRasterizeStart = control.micros();
+
         for (let i = 0; i < triangleCount; i++) {
           let i0 = indexBuf[i * 3];
           let i1 = indexBuf[i * 3 + 1];
@@ -371,8 +473,10 @@ namespace C3D {
           // cullType is -1 for frontface cull (keep back)
           if (area2 == 0 || (cullType != 0 && area2 * cullType > 0)) {
             // cull this triangle
+            trianglesCulled ++;
             continue;
           }
+          trianglesRasterized ++;
           // // test wireframe
           // this._target.drawLine(v0x, v0y, v1x, v1y, 1);
           // this._target.drawLine(v1x, v1y, v2x, v2y, 1);
@@ -452,19 +556,50 @@ namespace C3D {
             const yEnd = Math.min(Math.ceil(bottomY), height);
             let z = v0z + dzdx * (x - v0x) + dzdy * (yStart - v0y);
             let j = x * height + yStart;
+            pixelsTested += yEnd - yStart;
             for (let y = yStart; y < yEnd; y++) {
               if (z < zBuf[j]) {
                 zBuf[j] = z;
                 frameBuf[j] = singleOrFaceColor;
+                pixelsWritten ++;
               }
               j ++;
               z += dzdy;
             }
           }
         }
+
+        const timeModelRasterizeEnd = control.micros();
+        timeModelRasterize += timeModelRasterizeEnd - timeModelRasterizeStart;
       }
       // copy framebuffer to target image
       this._target.setRows(0, this._frameBuf);
+      // collect stats
+      const timeRenderEnd = control.micros();
+      this.stats.timeElapsed = timeRenderEnd - timeRenderStart;
+      this.stats.timeModelCollect = timeModelCollect;
+      this.stats.timeModelSetupAndMats = timeModelSetupAndMats;
+      this.stats.timeModelMVPs = timeModelMVPs;
+      this.stats.timeModelVertexTrans = timeModelVertexTrans;
+      this.stats.timeModelTriangleClip = timeModelTriangleClip;
+      this.stats.timeModelProjection = timeModelProjection;
+      this.stats.timeModelRasterize = timeModelRasterize;
+
+      this.stats.modelsVisible = modelsVisible;
+      this.stats.modelsRendered = modelsRendered;
+      this.stats.modelsCulled = modelsCulled;
+
+      this.stats.trianglesInput = trianglesInput;
+      this.stats.trianglesTrivialReject = trianglesTrivialReject;
+      this.stats.trianglesTrivialAccept = trianglesTrivialAccept;
+      this.stats.trianglesClipped = trianglesClipped;
+      this.stats.trianglesClippedAway = trianglesClippedAway;
+      this.stats.trianglesClipOutput = trianglesClipOutput;
+
+      this.stats.trianglesCulled = trianglesCulled;
+      this.stats.trianglesRasterized = trianglesRasterized;
+      this.stats.pixelsTested = pixelsTested;
+      this.stats.pixelsWritten = pixelsWritten;
     }
   }
 
